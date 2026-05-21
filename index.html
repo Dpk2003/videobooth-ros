@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doosan A0509 — IK Solver</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #111728;
+      --bg3: #1a2135;
+      --border: #2a3550;
+      --accent: #00d4ff;
+      --accent2: #7c5cfc;
+      --green: #00e5a0;
+      --red: #ff4d6d;
+      --amber: #ffb830;
+      --text: #e8edf8;
+      --muted: #7a8aaa;
+      --mono: 'Space Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* grid bg */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* header */
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 2.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .logo-text {
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .logo-text span {
+      color: var(--accent);
+    }
+
+    .logo-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    .header-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 4px 10px;
+      letter-spacing: 1px;
+      animation: pulse-border 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-border {
+
+      0%,
+      100% {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      50% {
+        border-color: var(--accent2);
+        color: var(--accent2);
+      }
+    }
+
+    /* panels */
+    .panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent2), var(--accent), transparent);
+      opacity: 0.5;
+    }
+
+    .panel-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border), transparent);
+    }
+
+    /* inputs */
+    .input-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .input-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .field input {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 15px;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      -moz-appearance: textfield;
+    }
+
+    .field input::-webkit-outer-spin-button,
+    .field input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+    }
+
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    }
+
+    .unit-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* robot params */
+    .params-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+
+    .param-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      padding: 8px 12px;
+      background: var(--bg3);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .param-label {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .param-val {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-weight: 700;
+    }
+
+    /* solve button */
+    .solve-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      margin-top: 1.25rem;
+    }
+
+    .solve-btn:hover {
+      opacity: 0.9;
+    }
+
+    .solve-btn:active {
+      transform: scale(0.99);
+    }
+
+    /* status */
+    .status-box {
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--mono);
+      font-size: 14px;
+      border: 1px solid;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .status-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .status-main {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .status-sub {
+      font-size: 12px;
+      margin-top: 2px;
+      opacity: 0.8;
+    }
+
+    .status-reach {
+      background: rgba(0, 229, 160, 0.08);
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    .status-nope {
+      background: rgba(255, 77, 109, 0.08);
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    .status-warn {
+      background: rgba(255, 184, 48, 0.08);
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    /* joint results */
+    .joint-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 0.75rem;
+    }
+
+    .jcard {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 0.5rem;
+      text-align: center;
+      transition: border-color 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .jcard.ok {
+      border-color: rgba(0, 229, 160, 0.4);
+    }
+
+    .jcard.ok::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--green);
+    }
+
+    .jcard.bad {
+      border-color: rgba(255, 77, 109, 0.4);
+    }
+
+    .jcard.bad::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--red);
+    }
+
+    .jcard.warn {
+      border-color: rgba(255, 184, 48, 0.4);
+    }
+
+    .jcard.warn::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--amber);
+    }
+
+    .j-name {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+
+    .j-val {
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .j-limit {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+      font-family: var(--mono);
+    }
+
+    .j-bar-wrap {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .j-bar {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* analysis table */
+    .analysis-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .analysis-table tr {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .analysis-table tr:last-child {
+      border-bottom: none;
+    }
+
+    .analysis-table td {
+      padding: 10px 4px;
+      font-size: 13px;
+    }
+
+    .analysis-table td:first-child {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+      width: 55%;
+    }
+
+    .analysis-table td:last-child {
+      text-align: right;
+      font-family: var(--mono);
+      font-weight: 700;
+    }
+
+    .ok-text {
+      color: var(--green);
+    }
+
+    .bad-text {
+      color: var(--red);
+    }
+
+    .info-text {
+      color: var(--accent);
+    }
+
+    /* workspace diagram */
+    .diagram-wrap {
+      display: flex;
+      justify-content: center;
+      margin-top: 0.5rem;
+    }
+
+    /* hidden by default */
+    #results {
+      display: none;
+      animation: fadeIn 0.4s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* footer */
+    footer {
+      text-align: center;
+      padding: 2rem 0 1rem;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+      line-height: 2;
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
+    }
+
+    /* responsive */
+    @media (max-width: 640px) {
+
+      .input-grid,
+      .input-grid-2 {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .joint-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+
+      .params-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+
+    <header>
+      <div class="logo">
+        <div class="logo-icon">IK</div>
+        <div>
+          <div class="logo-text"><span>DOOSAN ROBOTICS</span> / A0509</div>
+          <div class="logo-title">Joint Angle Calculator</div>
+        </div>
+      </div>
+      <div class="header-badge">6-DOF IK SOLVER</div>
+    </header>
+
+    <!-- Input panel -->
+    <div class="panel">
+      <div class="panel-title">TCP Target Position</div>
+      <div class="input-grid">
+        <div class="field">
+          <label>X <span class="unit-badge">mm</span></label>
+          <input type="number" id="ix" value="-1149.1" step="0.1">
+        </div>
+        <div class="field">
+          <label>Y <span class="unit-badge">mm</span></label>
+          <input type="number" id="iy" value="564.2" step="0.1">
+        </div>
+        <div class="field">
+          <label>Z <span class="unit-badge">mm</span></label>
+          <input type="number" id="iz" value="1200.0" step="0.1">
+        </div>
+      </div>
+      <div class="input-grid-2">
+        <div class="field">
+          <label>Azimuth <span class="unit-badge">deg</span></label>
+          <input type="number" id="iaz" value="0" step="1">
+        </div>
+        <div class="field">
+          <label>Elevation <span class="unit-badge">deg</span></label>
+          <input type="number" id="iel" value="0" step="1">
+        </div>
+        <div class="field">
+          <label>Roll <span class="unit-badge">deg</span></label>
+          <input type="number" id="iro" value="0" step="1">
+        </div>
+      </div>
+      <button class="solve-btn" onclick="solve()">▶ SOLVE INVERSE KINEMATICS</button>
+    </div>
+
+    <!-- Robot specs panel -->
+    <div class="panel">
+      <div class="panel-title">Robot Parameters — Doosan A0509</div>
+      <div class="params-grid">
+        <div class="param-row"><span class="param-label">Base Height (d1)</span><span class="param-val">152 mm</span>
+        </div>
+        <div class="param-row"><span class="param-label">Upper Arm (a2)</span><span class="param-val">325 mm</span>
+        </div>
+        <div class="param-row"><span class="param-label">Forearm (d4)</span><span class="param-val">325 mm</span></div>
+        <div class="param-row"><span class="param-label">End-Effector (rC)</span><span class="param-val">100 mm</span>
+        </div>
+        <div class="param-row"><span class="param-label">Max Reach</span><span class="param-val">900 mm</span></div>
+        <div class="param-row"><span class="param-label">Repeatability</span><span class="param-val">±0.03 mm</span>
+        </div>
+        <div class="param-row"><span class="param-label">J1 / J2 Range</span><span class="param-val">±360°</span></div>
+        <div class="param-row"><span class="param-label">J3 Range</span><span class="param-val">±160°</span></div>
+        <div class="param-row"><span class="param-label">J4 / J6 Range</span><span class="param-val">±360°</span></div>
+        <div class="param-row"><span class="param-label">J5 Range</span><span class="param-val">±360°</span></div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+      <div id="status-box" class="status-box"></div>
+
+      <div class="panel">
+        <div class="panel-title">Joint Angles</div>
+        <div class="joint-grid" id="jgrid"></div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem;">
+        <div class="panel">
+          <div class="panel-title">Reachability Analysis</div>
+          <table class="analysis-table" id="analysis-table"></table>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Workspace Diagram</div>
+          <div class="diagram-wrap">
+            <svg id="ws-svg" width="240" height="240" viewBox="-130 -130 260 260">
+              <defs>
+                <radialGradient id="outer-g" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="rgba(0,212,255,0.12)" />
+                  <stop offset="100%" stop-color="rgba(0,212,255,0)" />
+                </radialGradient>
+              </defs>
+              <!-- outer reach -->
+              <circle cx="0" cy="0" r="108" fill="url(#outer-g)" stroke="rgba(0,212,255,0.25)" stroke-width="1"
+                stroke-dasharray="4,4" />
+              <!-- inner void -->
+              <circle cx="0" cy="0" r="17" fill="rgba(255,77,109,0.08)" stroke="rgba(255,77,109,0.3)" stroke-width="1"
+                stroke-dasharray="3,3" />
+              <!-- base -->
+              <circle cx="0" cy="0" r="5" fill="var(--accent2)" />
+              <!-- labels -->
+              <text x="0" y="-114" text-anchor="middle" font-size="8" fill="rgba(0,212,255,0.6)"
+                font-family="Space Mono,monospace">900mm</text>
+              <text x="0" y="125" text-anchor="middle" font-size="8" fill="rgba(255,184,48,0.6)"
+                font-family="Space Mono,monospace">TOP VIEW</text>
+              <!-- target dot (updated on solve) -->
+              <circle id="target-dot" cx="0" cy="0" r="5" fill="var(--green)" opacity="0" stroke="#fff"
+                stroke-width="1.5" />
+              <!-- reach line -->
+              <line id="reach-line" x1="0" y1="0" x2="0" y2="0" stroke="rgba(0,229,160,0.5)" stroke-width="1.5"
+                stroke-dasharray="3,3" opacity="0" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Forward Kinematics Verification</div>
+        <table class="analysis-table" id="fk-table"></table>
+      </div>
+    </div>
+
+    <footer>
+      DOOSAN A0509 IK SOLVER — Analytical 6-DOF Inverse Kinematics<br>
+      Based on published link geometry · Always verify on physical robot before operation<br>
+      Built from open-source kinematics code · For simulation/planning use only
+    </footer>
+  </div>
+
+  <script>
+    const DEG = Math.PI / 180;
+    const RAD = 180 / Math.PI;
+
+    // A0509 link parameters (mm)
+    const d1 = 152, a2 = 325, d4 = 325, rC = 100;
+    const JOINT_LIMITS = [360, 360, 160, 360, 360, 360];
+
+    function mag(v) { return Math.sqrt(v.reduce((s, x) => s + x * x, 0)); }
+    function dot(a, b) { return a.reduce((s, x, i) => s + x * b[i], 0); }
+    function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+    function norm(v) { const m = mag(v); return v.map(x => x / m); }
+    function normalizeAngle(a) { return ((a + Math.PI) % (2 * Math.PI)) - Math.PI; }
+
+    function normalVectorAngle(normal, A, B) {
+      const det = dot(norm(normal), cross(A, B));
+      const d = dot(A, B);
+      return Math.atan2(det, d);
+    }
+
+    function solve() {
+      const px = parseFloat(document.getElementById('ix').value) || 0;
+      const py = parseFloat(document.getElementById('iy').value) || 0;
+      const pz = parseFloat(document.getElementById('iz').value) || 0;
+      const az = (parseFloat(document.getElementById('iaz').value) || 0) * DEG;
+      const el = (parseFloat(document.getElementById('iel').value) || 0) * DEG;
+      const ro = (parseFloat(document.getElementById('iro').value) || 0) * DEG;
+
+      document.getElementById('results').style.display = 'block';
+
+      // horizontal distance from base, full 3D distance
+      const horizDist = Math.sqrt(px * px + py * py);
+      const fullDist = Math.sqrt(px * px + py * py + pz * pz);
+
+      // shift z by d1 for shoulder frame
+      const pzS = pz - d1;
+      const wristDist = Math.sqrt(horizDist * horizDist + pzS * pzS);
+
+      // direction vector of end-effector
+      const dirX = Math.sin(Math.PI / 2 - el) * Math.cos(az);
+      const dirY = Math.sin(Math.PI / 2 - el) * Math.sin(az);
+      const dirZ = Math.cos(Math.PI / 2 - el);
+      const dir = [dirX, dirY, dirZ];
+
+      // wrist position (subtract end-effector)
+      const wx = px - dirX * rC;
+      const wy = py - dirY * rC;
+      const wz = pzS - dirZ * rC;
+
+      const lX = Math.sqrt(wx * wx + wy * wy);
+      const lY = wz;
+      const r = Math.sqrt(lX * lX + lY * lY);
+
+      // reachability checks
+      const maxArm = a2 + d4;
+      const reasons = [];
+      let reachable = true;
+
+      if (r > maxArm) {
+        reachable = false;
+        reasons.push('Wrist distance ' + r.toFixed(1) + 'mm exceeds arm reach of ' + maxArm + 'mm');
+      }
+      if (fullDist > 900 + d1) {
+        reachable = false;
+        reasons.push('Target is ' + fullDist.toFixed(1) + 'mm from base (max 900mm)');
+      }
+
+      // discriminant check
+      const n = (r * r + a2 * a2 - d4 * d4) / 2;
+      const xRootArg = (n * n * lX * lX) - (r * r * (n * n - (lY * lY * a2 * a2)));
+      const yRootArg = (n * n * lY * lY) - (r * r * (n * n - (lX * lX * a2 * a2)));
+
+      if (reachable && (xRootArg < 0 || yRootArg < 0)) {
+        reachable = false;
+        reasons.push('No valid geometric solution (inner void or singularity)');
+      }
+
+      let j1 = 0, j2 = 0, j3 = 0, j4 = 0, j5 = 0, j6 = 0;
+      let fkX = 0, fkY = 0, fkZ = 0;
+      let config = 'N/A';
+
+      if (reachable) {
+        // J1
+        j1 = Math.atan2(wx, wy);
+
+        // J2, J3 via law of cosines
+        const xTerm = (n * lX) / (r * r);
+        const yTerm = (n * lY) / (r * r);
+        const xRoot = Math.sqrt(xRootArg) / (r * r);
+        const yRoot = Math.sqrt(yRootArg) / (r * r);
+
+        const x1 = xTerm - Math.sign(lY) * xRoot;
+        const y1 = yTerm + Math.sign(lX) * yRoot;
+        const x2 = lX - x1;
+        const y2 = lY - y1;
+
+        j2 = Math.atan2(y1, x1);
+        j3 = Math.atan2(y2, x2);
+
+        // check J3 limit
+        if (Math.abs(j3 * RAD) > 160) {
+          reasons.push('J3 = ' + (j3 * RAD).toFixed(1) + '° exceeds ±160° limit — may need alternate solution');
+        }
+
+        // elbow and forearm vectors
+        const elbowX = a2 * Math.sin(Math.PI / 2 - j2) * Math.sin(j1);
+        const elbowY = a2 * Math.sin(Math.PI / 2 - j2) * Math.cos(j1);
+        const elbowZ = a2 * Math.cos(Math.PI / 2 - j2);
+        const elbow = [elbowX, elbowY, elbowZ];
+
+        const forearm = [wx - elbowX, wy - elbowY, wz - elbowZ];
+        const wrist = [wx, wy, wz];
+
+        // wrist orientation J4, J5, J6
+        const upRef = [0, 0, 1];
+        const arm_plane_normal = cross(upRef, wrist);
+        const pep_scale = dot(dir, forearm) / (mag(forearm) * mag(forearm));
+        const proj_ep = dir.map((v, i) => v - forearm[i] * pep_scale);
+
+        try {
+          j4 = normalVectorAngle(forearm, arm_plane_normal.map(v => v), proj_ep);
+          const ax5ref = cross(forearm, proj_ep);
+          j5 = normalVectorAngle(ax5ref, forearm, dir);
+          const wfref = cross(forearm, dir);
+          const hv = norm(cross(upRef, dir));
+          j6 = normalVectorAngle(dir, hv, wfref);
+        } catch (e) {
+          j4 = 0; j5 = 0; j6 = 0;
+          reasons.push('Wrist orientation near singularity — J4/J5/J6 approximate');
+        }
+
+        config = j5 >= 0 ? 'Elbow up / Wrist forward' : 'Elbow up / Wrist reverse';
+
+        // FK verification
+        const fkElbowX = a2 * Math.sin(Math.PI / 2 - j2) * Math.sin(j1);
+        const fkElbowY = a2 * Math.sin(Math.PI / 2 - j2) * Math.cos(j1);
+        const fkElbowZ = a2 * Math.cos(Math.PI / 2 - j2) + d1;
+        const fkForearmX = d4 * Math.sin(Math.PI / 2 - j3) * Math.sin(j1);
+        const fkForearmY = d4 * Math.sin(Math.PI / 2 - j3) * Math.cos(j1);
+        const fkForearmZ = d4 * Math.cos(Math.PI / 2 - j3);
+        fkX = fkElbowX + fkForearmX + dirX * rC;
+        fkY = fkElbowY + fkForearmY + dirY * rC;
+        fkZ = fkElbowZ + fkForearmZ + dirZ * rC;
+      }
+
+      const joints = [j1, j2, j3, j4, j5, j6];
+      const jointsDeg = joints.map(j => j * RAD);
+
+      // render status
+      const sbox = document.getElementById('status-box');
+      const allLimitsOk = jointsDeg.every((v, i) => Math.abs(v) <= JOINT_LIMITS[i]);
+
+      if (!reachable) {
+        sbox.className = 'status-box status-nope';
+        sbox.innerHTML = `
+      <div class="status-icon">✗</div>
+      <div>
+        <div class="status-main">UNREACHABLE</div>
+        <div class="status-sub">${reasons.join(' · ')}</div>
+      </div>`;
+      } else if (reasons.length > 0) {
+        sbox.className = 'status-box status-warn';
+        sbox.innerHTML = `
+      <div class="status-icon">⚠</div>
+      <div>
+        <div class="status-main">REACHABLE WITH WARNINGS</div>
+        <div class="status-sub">${reasons.join(' · ')}</div>
+      </div>`;
+      } else {
+        sbox.className = 'status-box status-reach';
+        sbox.innerHTML = `
+      <div class="status-icon">✓</div>
+      <div>
+        <div class="status-main">REACHABLE</div>
+        <div class="status-sub">Valid IK solution found · All joint limits satisfied · Config: ${config}</div>
+      </div>`;
+      }
+
+      // render joint cards
+      const names = ['J1', 'J2', 'J3', 'J4', 'J5', 'J6'];
+      const jgrid = document.getElementById('jgrid');
+      jgrid.innerHTML = names.map((name, i) => {
+        const val = jointsDeg[i];
+        const lim = JOINT_LIMITS[i];
+        const pct = Math.min(Math.abs(val) / lim * 100, 100).toFixed(1);
+        const cls = !reachable ? 'warn' : (Math.abs(val) <= lim ? 'ok' : 'bad');
+        const col = cls === 'ok' ? 'var(--green)' : cls === 'bad' ? 'var(--red)' : 'var(--amber)';
+        return `<div class="jcard ${cls}">
+      <div class="j-name">${name}</div>
+      <div class="j-val" style="color:${col}">${reachable ? val.toFixed(2) + '°' : '—'}</div>
+      <div class="j-limit">limit ±${lim}°</div>
+      <div class="j-bar-wrap"><div class="j-bar" style="width:${reachable ? pct : 0}%;background:${col}"></div></div>
+    </div>`;
+      }).join('');
+
+      // analysis table
+      const at = document.getElementById('analysis-table');
+      const distOk = fullDist <= 950;
+      at.innerHTML = `
+    <tr><td>Target XY distance from base</td><td class="${distOk ? 'ok-text' : 'bad-text'}">${horizDist.toFixed(1)} mm</td></tr>
+    <tr><td>3D distance from base origin</td><td class="${distOk ? 'ok-text' : 'bad-text'}">${fullDist.toFixed(1)} mm</td></tr>
+    <tr><td>Wrist distance (shoulder frame)</td><td class="${r <= (a2 + d4) ? 'ok-text' : 'bad-text'}">${r.toFixed(1)} mm / max ${a2 + d4} mm</td></tr>
+    <tr><td>Max arm reach (A0509)</td><td class="info-text">900 mm</td></tr>
+    <tr><td>J3 elbow check (±160°)</td><td class="${reachable && Math.abs(j3 * RAD) <= 160 ? 'ok-text' : 'bad-text'}">${reachable ? (j3 * RAD).toFixed(1) + '°' : 'N/A'}</td></tr>
+    <tr><td>Arm configuration</td><td class="info-text">${config}</td></tr>
+    <tr><td>Overall verdict</td><td class="${reachable ? 'ok-text' : 'bad-text'}">${reachable ? 'REACHABLE ✓' : 'UNREACHABLE ✗'}</td></tr>
+  `;
+
+      // FK verification table
+      const fkt = document.getElementById('fk-table');
+      const errX = reachable ? Math.abs(fkX - px) : null;
+      const errY = reachable ? Math.abs(fkY - py) : null;
+      const errZ = reachable ? Math.abs(fkZ - pz) : null;
+      fkt.innerHTML = `
+    <tr><td>Target X / FK result X</td><td class="${reachable && errX < 1 ? 'ok-text' : 'bad-text'}">${px.toFixed(2)} mm / ${reachable ? fkX.toFixed(2) + ' mm' : 'N/A'}</td></tr>
+    <tr><td>Target Y / FK result Y</td><td class="${reachable && errY < 1 ? 'ok-text' : 'bad-text'}">${py.toFixed(2)} mm / ${reachable ? fkY.toFixed(2) + ' mm' : 'N/A'}</td></tr>
+    <tr><td>Target Z / FK result Z</td><td class="${reachable && errZ < 1 ? 'ok-text' : 'bad-text'}">${pz.toFixed(2)} mm / ${reachable ? fkZ.toFixed(2) + ' mm' : 'N/A'}</td></tr>
+    <tr><td>Max position error</td><td class="${reachable && Math.max(errX, errY, errZ) < 1 ? 'ok-text' : 'bad-text'}">${reachable ? Math.max(errX, errY, errZ).toFixed(4) + ' mm' : 'N/A'}</td></tr>
+  `;
+
+      // workspace dot
+      const scale = 108 / 900;
+      const dotX = px * scale;
+      const dotY = -py * scale;
+      const td = document.getElementById('target-dot');
+      const rl = document.getElementById('reach-line');
+      td.setAttribute('cx', dotX.toFixed(1));
+      td.setAttribute('cy', dotY.toFixed(1));
+      td.setAttribute('fill', reachable ? 'var(--green)' : 'var(--red)');
+      td.setAttribute('opacity', '1');
+      rl.setAttribute('x2', dotX.toFixed(1));
+      rl.setAttribute('y2', dotY.toFixed(1));
+      rl.setAttribute('stroke', reachable ? 'rgba(0,229,160,0.5)' : 'rgba(255,77,109,0.5)');
+      rl.setAttribute('opacity', '1');
+    }
+
+    // auto-solve on load
+    window.addEventListener('load', solve);
+    // solve on Enter
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') solve(); });
+  </script>
+</body>
+
+</html>
