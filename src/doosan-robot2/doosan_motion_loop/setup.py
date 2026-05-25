@@ -20,10 +20,11 @@ setup(
     entry_points={
         'console_scripts': [
                    'spline_motion = doosan_motion_loop.spline_motion:main',
-                   'camera_trigger = doosan_motion_loop.camera_trigger:main',
+                   'default_motion = doosan_motion_loop.default_motion:main',
                    'arc_motion = doosan_motion_loop.arc_motion:main',
-                   'arc_motion1 = doosan_motion_loop.arc_motion1:main',
-                   'arc_motion2= doosan_motion_loop.arc_motion2:main',
+                   'test= doosan_motion_loop.test:main',
+                   'sine_wave= doosan_motion_loop.sine_wave:main',
+                   'line_motion= doosan_motion_loop.line_motion:main',
         ],
     },
 )

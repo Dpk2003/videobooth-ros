@@ -39,7 +39,7 @@ ARC_START_DEG = -50.0
 ARC_END_DEG   =  50.0
 
 # For spline: fewer points needed (spline interpolates between them)
-NUM_WAYPOINTS = 8    # 6-10 is ideal for spline
+NUM_WAYPOINTS = 2    # 6-10 is ideal for spline
 
 # Tool orientation
 TOOL_OA = 90.0

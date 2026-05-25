@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 
 """
-Doosan A0509 - Spline Motion with Keyboard Control
-==================================================
+Doosan A0509
+Pseudo Null-Space / Gimbal Style Motion
+=======================================
 
-SPACE -> Run ONE complete cycle:
-           Forward spline
-           Reverse spline
-           Return HOME
-           Stop
+Goal:
+- TCP appears almost fixed
+- Robot joints visibly move
+- Creates floating / cinematic motion
 
-Q     -> Emergency stop + quit
+Method:
+- Small TCP orbital tolerance (few mm)
+- Large orientation variation
+- Smooth spline interpolation
 
-Features:
-- move_spline_task smooth motion
-- move_joint home return
-- keyboard control
-- thread-safe service calls
-- safe state handling
+Controls:
+SPACE -> Run one motion cycle
+Q     -> Stop and quit
 """
 
 import rclpy
@@ -35,6 +35,7 @@ from std_msgs.msg import Float64MultiArray
 
 import threading
 import time
+import math
 import sys
 import select
 import termios
@@ -47,27 +48,38 @@ import tty
 
 ROBOT_NS = "dsr01"
 
-HOME_POS = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+HOME_POS = [0.0, 0.0, 90.0, 0.0, 90.0, 0.0]
 
 PRE_START_POS = [0.0, -20.0, 70.0, 0.0, 70.0, 0.0]
 
-# Smooth cinematic speeds
-SPLINE_VEL = [200.0, 200.0]
-SPLINE_ACC = [400.0, 400.0]
+# Fixed visual center
+CENTER_X = 350.0
+CENTER_Y = 0.0
+CENTER_Z = 500.0
 
-JOINT_VEL = 120.0
-JOINT_ACC = 80.0
+# VERY SMALL motion radius
+# creates illusion of fixed TCP
+ORBIT_RADIUS = 5.0  # mm
+
+NUM_POINTS = 40
+
+# Smooth cinematic motion
+VEL = [40.0, 40.0]
+ACC = [60.0, 60.0]
+
+JOINT_VEL = 30.0
+JOINT_ACC = 30.0
 
 
 # ============================================================
 # NODE
 # ============================================================
 
-class SplineMotionNode(Node):
+class GimbalMotionNode(Node):
 
     def __init__(self):
 
-        super().__init__('spline_motion_node')
+        super().__init__('gimbal_motion_node')
 
         cbg = ReentrantCallbackGroup()
 
@@ -102,34 +114,7 @@ class SplineMotionNode(Node):
         self.is_running = False
         self.should_stop = False
 
-        # ----------------------------------------------------
-        # SPLINE POINTS
-        # ----------------------------------------------------
-
-        self.forward_pos = [
-
-            # Segment 1
-            (19.810, 182.400, 859.600,
-             85.30, 91.75, 0.14),
-
-            # Segment 2
-            (-36.680, 841.990, 429.610,
-             84.58, 92.45, -0.55),
-
-            # Segment 3
-            (-576.570, 548.010, 293.510,
-             76.81, 91.57, -0.53),
-
-            # Segment 4
-            (399.620, 635.170, 445.970,
-             97.34, 90.07, -0.36),
-
-            # Segment 5
-            (50.000, 200.000, 800.000,
-             85.00, 91.00, 0.00),
-        ]
-
-        self.reverse_pos = list(reversed(self.forward_pos))
+        self.print_banner()
 
         # ----------------------------------------------------
         # KEYBOARD THREAD
@@ -140,10 +125,8 @@ class SplineMotionNode(Node):
             daemon=True
         ).start()
 
-        self.print_banner()
-
     # ========================================================
-    # WAIT SERVICES
+    # WAIT FOR SERVICES
     # ========================================================
 
     def wait_services(self):
@@ -159,11 +142,14 @@ class SplineMotionNode(Node):
         for client, name in services:
 
             while not client.wait_for_service(timeout_sec=1.0):
+
                 self.get_logger().info(
                     f'Waiting for {name}...'
                 )
 
-        self.get_logger().info('All services connected!')
+        self.get_logger().info(
+            'All services connected!'
+        )
 
     # ========================================================
     # THREAD SAFE SERVICE CALL
@@ -172,6 +158,7 @@ class SplineMotionNode(Node):
     def call_service(self, client, req, timeout=60.0):
 
         event = threading.Event()
+
         result_holder = [None]
 
         def callback(future):
@@ -180,6 +167,7 @@ class SplineMotionNode(Node):
                 result_holder[0] = future.result()
 
             except Exception as ex:
+
                 self.get_logger().error(
                     f'Service error: {ex}'
                 )
@@ -187,6 +175,7 @@ class SplineMotionNode(Node):
             event.set()
 
         future = client.call_async(req)
+
         future.add_done_callback(callback)
 
         finished = event.wait(timeout=timeout)
@@ -202,14 +191,42 @@ class SplineMotionNode(Node):
         return result_holder[0]
 
     # ========================================================
-    # CREATE SPLINE POINT
+    # MOVE JOINT
+    # ========================================================
+
+    def move_joint(self, joints):
+
+        req = MoveJoint.Request()
+
+        req.pos = [float(v) for v in joints]
+
+        req.vel = JOINT_VEL
+        req.acc = JOINT_ACC
+
+        req.time = 0.0
+        req.radius = 0.0
+
+        req.mode = 0
+        req.blend_type = 0
+        req.sync_type = 0
+
+        result = self.call_service(
+            self.movej_client,
+            req,
+            timeout=60.0
+        )
+
+        return result and result.success
+
+    # ========================================================
+    # MAKE SPLINE POINT
     # ========================================================
 
     def make_point(self, x, y, z, a, b, c):
 
-        point = Float64MultiArray()
+        pt = Float64MultiArray()
 
-        point.data = [
+        pt.data = [
             float(x),
             float(y),
             float(z),
@@ -218,101 +235,57 @@ class SplineMotionNode(Node):
             float(c)
         ]
 
-        return point
+        return pt
 
     # ========================================================
-    # MOVE JOINT
+    # GENERATE GIMBAL MOTION
     # ========================================================
 
-    def move_home(self):
+    def generate_motion_points(self):
 
-        self.get_logger().info('Moving HOME...')
+        points = []
 
-        req = MoveJoint.Request()
+        for i in range(NUM_POINTS):
 
-        req.pos = HOME_POS
-        req.vel = JOINT_VEL
-        req.acc = JOINT_ACC
+            t = i / (NUM_POINTS - 1)
 
-        req.time = 0.0
-        req.radius = 0.0
+            theta = 2.0 * math.pi * t
 
-        req.mode = 0
-        req.blend_type = 0
-        req.sync_type = 0
+            # ------------------------------------------------
+            # VERY SMALL POSITION MOTION
+            # ------------------------------------------------
 
-        result = self.call_service(
-            self.movej_client,
-            req,
-            timeout=60.0
-        )
+            x = CENTER_X + ORBIT_RADIUS * math.cos(theta)
 
-        if result and result.success:
+            y = CENTER_Y + ORBIT_RADIUS * math.sin(theta)
 
-            self.get_logger().info(
-                'HOME reached!'
+            z = CENTER_Z + (
+                2.0 * math.sin(theta * 2.0)
             )
 
-            return True
+            # ------------------------------------------------
+            # LARGE ORIENTATION MOTION
+            # ------------------------------------------------
 
-        self.get_logger().error(
-            'HOME move failed!'
-        )
+            # Creates visible joint motion
 
-        return False
+            a = 90.0 + 25.0 * math.sin(theta)
 
-    # ========================================================
-    # MOVE PRE START
-    # ========================================================
+            b = 90.0 + 20.0 * math.cos(theta)
 
-    def move_pre_start(self):
+            c = 40.0 * math.sin(theta * 1.5)
 
-        self.get_logger().info(
-            'Moving PRE-START...'
-        )
-
-        req = MoveJoint.Request()
-
-        req.pos = PRE_START_POS
-        req.vel = JOINT_VEL
-        req.acc = JOINT_ACC
-
-        req.time = 0.0
-        req.radius = 0.0
-
-        req.mode = 0
-        req.blend_type = 0
-        req.sync_type = 0
-
-        result = self.call_service(
-            self.movej_client,
-            req,
-            timeout=60.0
-        )
-
-        if result and result.success:
-
-            self.get_logger().info(
-                'PRE-START reached!'
+            points.append(
+                (x, y, z, a, b, c)
             )
 
-            return True
-
-        self.get_logger().error(
-            'PRE-START failed!'
-        )
-
-        return False
+        return points
 
     # ========================================================
-    # SPLINE MOTION
+    # EXECUTE SPLINE
     # ========================================================
 
-    def execute_spline(self, points, direction):
-
-        self.get_logger().info(
-            f'Running spline ({direction})...'
-        )
+    def execute_spline(self, points):
 
         req = MoveSplineTask.Request()
 
@@ -323,8 +296,8 @@ class SplineMotionNode(Node):
 
         req.pos_cnt = len(req.pos)
 
-        req.vel = SPLINE_VEL
-        req.acc = SPLINE_ACC
+        req.vel = VEL
+        req.acc = ACC
 
         req.time = 0.0
 
@@ -337,22 +310,10 @@ class SplineMotionNode(Node):
             timeout=120.0
         )
 
-        if result and result.success:
-
-            self.get_logger().info(
-                f'{direction} spline complete!'
-            )
-
-            return True
-
-        self.get_logger().error(
-            f'{direction} spline failed!'
-        )
-
-        return False
+        return result and result.success
 
     # ========================================================
-    # STOP ROBOT
+    # STOP
     # ========================================================
 
     def stop_robot(self):
@@ -367,12 +328,8 @@ class SplineMotionNode(Node):
             timeout=5.0
         )
 
-        self.get_logger().info(
-            'Robot stopped.'
-        )
-
     # ========================================================
-    # ONE COMPLETE CYCLE
+    # EXECUTE ONE CYCLE
     # ========================================================
 
     def execute_cycle(self):
@@ -381,19 +338,24 @@ class SplineMotionNode(Node):
             return
 
         self.is_running = True
+
         self.should_stop = False
 
-        print('\n' + '=' * 50)
-        print('STARTING SPLINE CYCLE')
-        print('=' * 50)
+        print('\n' + '=' * 60)
+        print('STARTING GIMBAL STYLE MOTION')
+        print('=' * 60)
 
         try:
 
-            # --------------------------------------------
+            # ------------------------------------------------
             # HOME
-            # --------------------------------------------
+            # ------------------------------------------------
 
-            if not self.move_home():
+            print('\nMoving HOME...')
+
+            if not self.move_joint(HOME_POS):
+
+                print('HOME failed!')
                 return
 
             if self.should_stop:
@@ -401,11 +363,15 @@ class SplineMotionNode(Node):
 
             time.sleep(1.0)
 
-            # --------------------------------------------
+            # ------------------------------------------------
             # PRE START
-            # --------------------------------------------
+            # ------------------------------------------------
 
-            if not self.move_pre_start():
+            print('Moving PRE-START...')
+
+            if not self.move_joint(PRE_START_POS):
+
+                print('PRE-START failed!')
                 return
 
             if self.should_stop:
@@ -413,14 +379,27 @@ class SplineMotionNode(Node):
 
             time.sleep(1.0)
 
-            # --------------------------------------------
-            # FORWARD
-            # --------------------------------------------
+            # ------------------------------------------------
+            # GENERATE MOTION
+            # ------------------------------------------------
 
-            if not self.execute_spline(
-                self.forward_pos,
-                'FORWARD'
-            ):
+            print('Generating cinematic motion...')
+
+            points = self.generate_motion_points()
+
+            print(
+                f'Generated {len(points)} spline points'
+            )
+
+            # ------------------------------------------------
+            # SPLINE
+            # ------------------------------------------------
+
+            print('Running spline motion...')
+
+            if not self.execute_spline(points):
+
+                print('Spline failed!')
                 return
 
             if self.should_stop:
@@ -428,28 +407,15 @@ class SplineMotionNode(Node):
 
             time.sleep(0.5)
 
-            # --------------------------------------------
-            # REVERSE
-            # --------------------------------------------
-
-            if not self.execute_spline(
-                self.reverse_pos,
-                'REVERSE'
-            ):
-                return
-
-            if self.should_stop:
-                return
-
-            time.sleep(0.5)
-
-            # --------------------------------------------
+            # ------------------------------------------------
             # RETURN HOME
-            # --------------------------------------------
+            # ------------------------------------------------
 
-            self.move_home()
+            print('Returning HOME...')
 
-            print('\nCycle complete!')
+            self.move_joint(HOME_POS)
+
+            print('\nMotion complete!')
             print('Press SPACE to run again.')
 
         finally:
@@ -457,12 +423,13 @@ class SplineMotionNode(Node):
             self.is_running = False
 
     # ========================================================
-    # KEYBOARD CONTROL
+    # KEYBOARD
     # ========================================================
 
     def keyboard_monitor(self):
 
         fd = sys.stdin.fileno()
+
         old = termios.tcgetattr(fd)
 
         try:
@@ -484,15 +451,14 @@ class SplineMotionNode(Node):
                 ch = sys.stdin.read(1)
 
                 # ------------------------------------------------
-                # SPACE -> START ONE CYCLE
+                # SPACE
                 # ------------------------------------------------
 
                 if ch == ' ':
 
                     if not self.is_running:
 
-                        print('\nSPACE pressed!')
-                        print('Starting cycle...\n')
+                        print('\nSPACE pressed')
 
                         threading.Thread(
                             target=self.execute_cycle,
@@ -502,16 +468,16 @@ class SplineMotionNode(Node):
                     else:
 
                         print(
-                            '\nRobot already running!\n'
+                            '\nRobot already moving!'
                         )
 
                 # ------------------------------------------------
-                # Q -> STOP + QUIT
+                # Q
                 # ------------------------------------------------
 
                 elif ch.lower() == 'q':
 
-                    print('\nStopping robot...\n')
+                    print('\nStopping robot...')
 
                     self.should_stop = True
 
@@ -535,31 +501,37 @@ class SplineMotionNode(Node):
 
     def print_banner(self):
 
-        print('\n' + '=' * 60)
-        print('DOOSAN A0509 SPLINE MOTION')
-        print('=' * 60)
+        print('\n' + '=' * 65)
+        print('DOOSAN A0509 GIMBAL STYLE MOTION')
+        print('=' * 65)
 
-        print(f'Robot Namespace : {ROBOT_NS}')
-        print(f'Spline Points   : {len(self.forward_pos)}')
+        print(f'Center Position :')
+        print(
+            f'  X={CENTER_X:.1f} '
+            f'Y={CENTER_Y:.1f} '
+            f'Z={CENTER_Z:.1f}'
+        )
+
+        print(
+            f'Orbit Radius : {ORBIT_RADIUS:.1f} mm'
+        )
+
+        print(
+            f'Spline Points: {NUM_POINTS}'
+        )
+
+        print()
+        print('Behavior:')
+        print('  TCP appears visually fixed')
+        print('  Robot joints move dynamically')
+        print('  Cinematic floating effect')
 
         print()
         print('Controls:')
-        print('  SPACE -> Run one cycle')
+        print('  SPACE -> Run motion')
         print('  Q     -> Stop + quit')
 
-        print()
-        print('Cycle:')
-        print('  HOME')
-        print('    ↓')
-        print('  PRE-START')
-        print('    ↓')
-        print('  FORWARD SPLINE')
-        print('    ↓')
-        print('  REVERSE SPLINE')
-        print('    ↓')
-        print('  HOME')
-
-        print('=' * 60 + '\n')
+        print('=' * 65 + '\n')
 
 
 # ============================================================
@@ -570,7 +542,7 @@ def main(args=None):
 
     rclpy.init(args=args)
 
-    node = SplineMotionNode()
+    node = GimbalMotionNode()
 
     executor = MultiThreadedExecutor()
 
@@ -586,9 +558,11 @@ def main(args=None):
     try:
 
         while rclpy.ok():
+
             time.sleep(0.1)
 
     except KeyboardInterrupt:
+
         pass
 
     finally:
@@ -608,4 +582,5 @@ def main(args=None):
 
 
 if __name__ == '__main__':
+
     main()
