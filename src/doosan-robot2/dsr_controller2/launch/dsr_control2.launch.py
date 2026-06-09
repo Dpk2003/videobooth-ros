@@ -47,7 +47,7 @@ def generate_launch_description():
 		        {"host":    "127.0.0.1" },
 		        {"port":    12345       },
 		        {"mode":    "virtual"   },
-		        {"model":   "a0509"     },
+		        {"model":   "m1013"     },
                 {"gripper": "none"      },
 	            {"mobile":  "none"      },
                 #parameters_file_path       # 파라미터 설정을 동일이름으로 launch 파일과 yaml 파일에서 할 경우 yaml 파일로 셋팅된다.    

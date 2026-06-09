@@ -24,12 +24,12 @@ from launch_ros.substitutions import FindPackageShare
 ARGUMENTS = [
     DeclareLaunchArgument(
         'model',
-        default_value='a0509',
+        default_value='m1013',
         description='Robot Model'
     ),
     DeclareLaunchArgument(
         'color',
-        default_value='blue',
+        default_value='white',
         description='Robot Color'
     ),
     DeclareLaunchArgument('name',  default_value = '',     description = 'NAME_SPACE'     ),
@@ -45,7 +45,7 @@ def generate_launch_description():
                 [
                     FindPackageShare("dsr_description2"),
                     "xacro",
-                    "a0509.urdf.xacro",
+                    "m1013.urdf.xacro",
                 ]
             ),
         ]

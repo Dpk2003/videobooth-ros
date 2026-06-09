@@ -6,9 +6,9 @@ from dsr_msgs2.srv import MoveStop, MoveJoint, MoveLine
 import threading
 import time
 
-class RobotTriggerNode(Node):
+class defaultmotion(Node):
     def __init__(self):
-        super().__init__('robot_trigger_node')
+        super().__init__('default_motion_node')
 
         # Robot services
         self.stop_client = self.create_client(
@@ -216,7 +216,7 @@ class RobotTriggerNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = RobotTriggerNode()
+    node = defaultmotion()
 
     executor = MultiThreadedExecutor()
     executor.add_node(node)

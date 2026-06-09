@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Doosan A0509 Arc Motion - LIQUID SMOOTH VERSION
+Doosan A0509 line Motion - LIQUID SMOOTH VERSION
 ================================================
 Uses move_spline_task for truly smooth motion.
 All points sent at once as one continuous curve.
@@ -64,10 +64,10 @@ DEFAULT_SPEED = '1'
 # ============================================================
 
 
-class ArcMotionNode(Node):
+class linemotion(Node):
 
     def __init__(self):
-        super().__init__('arc_motion_node')
+        super().__init__('line_motion_node')
 
         cbg = ReentrantCallbackGroup()
 
@@ -535,7 +535,7 @@ class ArcMotionNode(Node):
 # ============================================================
 def main(args=None):
     rclpy.init(args=args)
-    node = ArcMotionNode()
+    node = linemotion()
 
     executor = MultiThreadedExecutor()
     executor.add_node(node)
